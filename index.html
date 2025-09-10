@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Healthy Basket — Food Scanner (Test)</title>
+  <style>
+    :root {
+      --brand: #116530;
+      --muted: #6b7280;
+      --card: #ffffff;
+      --bg: #f7faf7;
+    }
+    body { margin:0; font-family: Inter, system-ui, Arial; background:var(--bg); color:#0f172a; }
+    .wrap { max-width:980px; margin:40px auto; padding:20px; }
+    .card { background:var(--card); border-radius:12px; box-shadow:0 6px 18px rgba(15,23,42,0.06); padding:20px; }
+    header { display:flex; align-items:center; gap:14px; margin-bottom:18px; }
+    header img { height:52px; width:auto; border-radius:8px; background:#fff; padding:6px; }
+    h1 { margin:0; font-size:20px; color:var(--brand); }
+    .subtitle { margin:0; font-size:13px; color:var(--muted); }
+
+    .grid { display:grid; grid-template-columns: 1fr 1.6fr; gap:18px; }
+    .uploadbox { border:2px dashed rgba(17,101,48,0.12); background: linear-gradient(180deg, rgba(17,101,48,0.01), transparent); border-radius:10px; padding:18px; text-align:center; cursor:pointer; min-height:160px; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; }
+    .uploadbox img.preview { max-height:120px; object-fit:contain; border-radius:8px; box-shadow:0 4px 9px rgba(2,6,23,0.06); }
+    .controls { margin-top:12px; display:flex; gap:10px; }
+    button { border:0; padding:10px 14px; border-radius:8px; cursor:pointer; font-weight:600; }
+    .btn-primary { background: var(--brand); color:#fff; }
+    .btn-ghost { background:transparent; border:1px solid #e6e9eb; color:var(--muted); }
+
+    .small { font-size:13px; color:var(--muted); margin-top:8px; }
+    .results { padding:14px; background:#fbfdfb; border-radius:8px; border:1px solid #eef6ee; min-height:220px; overflow:auto; }
+    .row { display:flex; justify-content:space-between; gap:12px; }
+    .kv { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px dashed #f1f5f1; }
+    .kv:last-child { border-bottom:0; }
+    pre { background:#fff; padding:12px; border-radius:8px; border:1px solid #eef2f1; font-size:12px; overflow:auto; }
+
+    .note { font-size:12px; color:#9ca3af; margin-top:8px; }
+    @media (max-width:880px) { .grid { grid-template-columns: 1fr; } header img { height:44px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <header>
+        <img src="logo.png" alt="Healthy Basket logo" id="logo" onerror="this.style.display='none'">
+        <div>
+          <h1>Healthy Basket — Food Scanner</h1>
+          <div class="subtitle">Upload a photo of a meal → get nutrition & ingredient breakdown</div>
+        </div>
+      </header>
+
+      <div class="grid">
+        <!-- Left: upload -->
+        <div>
+          <div class="uploadbox" id="dropzone">
+            <div id="placeholder">
+              <div style="font-size:28px; color:var(--brand)">🍽️</div>
+              <div style="font-weight:600; margin-top:6px">Drag & drop or click to upload</div>
+              <div class="small">Supported: JPG / PNG / HEIC — keep under 8MB</div>
+            </div>
+            <img id="preview" class="preview" style="display:none" alt="preview">
+            <input id="fileInput" type="file" accept="image/*" style="display:none">
+          </div>
+
+          <div class="controls">
+            <button id="scanBtn" class="btn-primary">Scan food</button>
+            <button id="clearBtn" class="btn-ghost">Clear</button>
+          </div>
+
+          <div style="margin-top:10px">
+            <label style="font-size:13px;color:var(--muted);display:block;margin-bottom:6px">Optional: API key (if your API requires auth)</label>
+            <input id="apiKey" placeholder="Paste token here (optional)" style="width:100%;padding:8px;border-radius:8px;border:1px solid #e6e9eb" />
+          </div>
+
+          <div class="note" id="statusNote">Status: idle</div>
+        </div>
+
+        <!-- Right: results -->
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+            <div style="font-weight:700">Scan results</div>
+            <div style="display:flex; gap:8px">
+              <button id="downloadBtn" class="btn-ghost">Download JSON</button>
+              <button id="copyBtn" class="btn-ghost">Copy JSON</button>
+            </div>
+          </div>
+
+          <div class="results" id="resultsArea">
+            <div id="noRes" style="text-align:center;color:var(--muted)">No result yet — upload an image and click <strong>Scan food</strong>.</div>
+
+            <div id="finalUI" style="display:none">
+              <div class="row" style="align-items:flex-start">
+                <div>
+                  <div style="font-size:13px;color:var(--muted)">Food</div>
+                  <div id="foodName" style="font-size:20px;font-weight:700;margin-top:6px"></div>
+                  <div id="foodSummary" style="margin-top:8px;color:#374151"></div>
+                </div>
+                <div style="text-align:right">
+                  <div style="font-size:13px;color:var(--muted)">Confidence</div>
+                  <div id="confidence" style="font-weight:700;font-size:16px;margin-top:6px"></div>
+                </div>
+              </div>
+
+              <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:12px">
+                <div style="background:#fff;padding:12px;border-radius:8px;border:1px solid #eef6ee">
+                  <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Nutritional breakdown</div>
+                  <div id="nutritionKV"></div>
+                </div>
+
+                <div style="background:#fff;padding:12px;border-radius:8px;border:1px solid #eef6ee">
+                  <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Health assessment</div>
+                  <div style="font-size:14px"><strong>Healthy?</strong> <span id="isHealthy"></span></div>
+                  <div id="healthReason" style="margin-top:8px;color:#374151"></div>
+                </div>
+              </div>
+
+              <div style="margin-top:12px;background:#fff;padding:12px;border-radius:8px;border:1px solid #eef6ee">
+                <div style="font-size:13px;color:var(--muted);margin-bottom:8px">Ingredients identified</div>
+                <div id="ingredientsList"></div>
+              </div>
+
+              <div style="margin-top:12px">
+                <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Raw API response</div>
+                <pre id="rawPre" style="height:120px"></pre>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    /***** CONFIG: edit these two values BEFORE testing *****/
+    const API_ENDPOINT = "https://5dos9o5u1h.execute-api.us-east-1.amazonaws.com/analyze-food"; // <-- Replace this with your deployed scanner endpoint
+    const API_FIELD_NAME = "image";                         // <-- Change to 'image' if your API expects 'image' instead
+    /***** end config *****/
+
+    // DOM
+    const drop = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const preview = document.getElementById('preview');
+    const placeholder = document.getElementById('placeholder');
+    const scanBtn = document.getElementById('scanBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const statusNote = document.getElementById('statusNote');
+    const resultsArea = document.getElementById('resultsArea');
+    const finalUI = document.getElementById('finalUI');
+    const noRes = document.getElementById('noRes');
+    const foodName = document.getElementById('foodName');
+    const confidence = document.getElementById('confidence');
+    const foodSummary = document.getElementById('foodSummary');
+    const nutritionKV = document.getElementById('nutritionKV');
+    const ingredientsList = document.getElementById('ingredientsList');
+    const rawPre = document.getElementById('rawPre');
+    const isHealthy = document.getElementById('isHealthy');
+    const healthReason = document.getElementById('healthReason');
+    const apiKeyInput = document.getElementById('apiKey');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const copyBtn = document.getElementById('copyBtn');
+
+    let currentFile = null;
+    let lastResponse = null;
+
+    // drag/drop and click
+    drop.addEventListener('click', ()=> fileInput.click());
+    drop.addEventListener('dragover', (e)=> e.preventDefault());
+    drop.addEventListener('drop', (e)=> {
+      e.preventDefault();
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) loadFile(f);
+    });
+    fileInput.addEventListener('change', ()=> {
+      const f = fileInput.files && fileInput.files[0];
+      if (f) loadFile(f);
+    });
+
+    function loadFile(f){
+      currentFile = f;
+      placeholder.style.display = 'none';
+      preview.style.display = 'block';
+      preview.src = URL.createObjectURL(f);
+      statusNote.textContent = 'Image ready';
+      finalUI.style.display='none';
+      noRes.style.display='none';
+      rawPre.textContent = '';
+    }
+
+    clearBtn.addEventListener('click', ()=>{
+      currentFile = null;
+      fileInput.value = '';
+      preview.style.display = 'none';
+      placeholder.style.display = 'block';
+      statusNote.textContent = 'Cleared';
+      finalUI.style.display='none';
+      noRes.style.display='block';
+      rawPre.textContent = '';
+    });
+
+    // scanning
+    scanBtn.addEventListener('click', async ()=>{
+      if (!currentFile) { alert('Please upload an image first'); return; }
+      if (!API_ENDPOINT || API_ENDPOINT.includes('REPLACE_WITH')) {
+        alert('Please open index.html and replace the API_ENDPOINT value with your real endpoint (Step 1).');
+        return;
+      }
+
+      statusNote.textContent = 'Scanning...';
+      scanBtn.disabled = true;
+
+      const fd = new FormData();
+      fd.append(API_FIELD_NAME, currentFile);
+
+      const headers = {};
+      const apiKey = apiKeyInput.value.trim();
+      if (apiKey) {
+        headers['Authorization'] = apiKey.startsWith('Bearer') ? apiKey : ('Bearer ' + apiKey);
+      }
+
+      try {
+        const resp = await fetch(API_ENDPOINT, { method:'POST', body: fd, headers });
+        const text = await resp.text();
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch(e) {
+          throw new Error('API returned non-JSON response: ' + text);
+        }
+
+        lastResponse = parsed;
+
+        // prefer parsed.final_output
+        const final = parsed.final_output || parsed.data || parsed.result || parsed;
+        renderFinal(final, parsed);
+        statusNote.textContent = 'Done';
+      } catch (err) {
+        statusNote.textContent = 'Error: ' + err.message;
+        alert('Scan failed: ' + err.message + '\\n(If you see a CORS error in the console, ask your dev to enable CORS for this site.)');
+        console.error(err);
+      } finally {
+        scanBtn.disabled = false;
+      }
+    });
+
+    function renderFinal(finalObj, raw){
+      rawPre.textContent = JSON.stringify(raw, null, 2);
+      if (!finalObj || !finalObj.food_name) {
+        // show raw if final not as expected
+        finalUI.style.display='block';
+        foodName.textContent = finalObj && finalObj.food_name ? finalObj.food_name : '(unexpected schema)';
+        confidence.textContent = finalObj && finalObj.confidence_score ? finalObj.confidence_score : '-';
+        foodSummary.textContent = finalObj && finalObj.food_summary ? finalObj.food_summary : 'No summary provided';
+        nutritionKV.innerHTML = '';
+        isHealthy.textContent = finalObj && finalObj.Health_assessment ? String(finalObj.Health_assessment['is_healthy?']) : 'N/A';
+        healthReason.textContent = finalObj && finalObj.Health_assessment ? (finalObj.Health_assessment.Reason || '') : '';
+        ingredientsList.innerHTML = '<div style="color:var(--muted)">No structured ingredients found — inspect raw.</div>';
+        return;
+      }
+
+      // populate structured UI
+      finalUI.style.display='block';
+      foodName.textContent = finalObj.food_name || '';
+      confidence.textContent = finalObj.confidence_score || '';
+      foodSummary.textContent = finalObj.food_summary || '';
+
+      // nutrition
+      nutritionKV.innerHTML = '';
+      const nb = finalObj.nutritional_breakdown || {};
+      for (const k of Object.keys(nb)) {
+        const div = document.createElement('div');
+        div.className = 'kv';
+        div.innerHTML = `<div style="color:var(--muted)">${k.replace(/_/g,' ')}</div><div style="font-weight:600">${nb[k]}</div>`;
+        nutritionKV.appendChild(div);
+      }
+
+      // health
+      isHealthy.textContent = String(finalObj.Health_assessment?.['is_healthy?']);
+      healthReason.textContent = finalObj.Health_assessment?.Reason || '';
+
+      // ingredients
+      ingredientsList.innerHTML = '';
+      if (Array.isArray(finalObj.ingredients_identified) && finalObj.ingredients_identified.length) {
+        finalObj.ingredients_identified.forEach(it => {
+          const block = document.createElement('div');
+          block.style.padding = '8px';
+          block.style.borderBottom = '1px solid #f1f5f1';
+          block.innerHTML = `<div style="font-weight:600">${it.name}</div><div style="color:var(--muted);margin-top:6px">${it.nutrition_description}</div>`;
+          ingredientsList.appendChild(block);
+        });
+      } else {
+        ingredientsList.innerHTML = '<div style="color:var(--muted)">No ingredients provided</div>';
+      }
+    }
+
+    // download / copy
+    downloadBtn.addEventListener('click', ()=>{
+      if (!lastResponse) return alert('No response to download');
+      const b = new Blob([JSON.stringify(lastResponse, null, 2)], {type:'application/json'});
+      const u = URL.createObjectURL(b);
+      const a = document.createElement('a'); a.href = u; a.download = 'scanner-result.json'; a.click();
+      URL.revokeObjectURL(u);
+    });
+
+    copyBtn.addEventListener('click', async ()=>{
+      if (!lastResponse) return alert('No response to copy');
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(lastResponse, null, 2));
+        alert('Copied to clipboard');
+      } catch (e) {
+        alert('Copy failed — check your browser permissions');
+      }
+    });
+  </script>
+</body>
+</html>
