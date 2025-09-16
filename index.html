@@ -67,10 +67,7 @@
             <button id="clearBtn" class="btn-ghost">Clear</button>
           </div>
 
-          <div style="margin-top:10px">
-            <label style="font-size:13px;color:var(--muted);display:block;margin-bottom:6px">Optional: API key (if your API requires auth)</label>
-            <input id="apiKey" placeholder="Paste token here (optional)" style="width:100%;padding:8px;border-radius:8px;border:1px solid #e6e9eb" />
-          </div>
+          <!-- API key removed (intentionally) -->
 
           <div class="note" id="statusNote">Status: idle</div>
         </div>
@@ -79,10 +76,8 @@
         <div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
             <div style="font-weight:700">Scan results</div>
-            <div style="display:flex; gap:8px">
-              <button id="downloadBtn" class="btn-ghost">Download JSON</button>
-              <button id="copyBtn" class="btn-ghost">Copy JSON</button>
-            </div>
+            <!-- Download / Copy JSON buttons removed -->
+            <div style="width:1px"></div>
           </div>
 
           <div class="results" id="resultsArea">
@@ -119,10 +114,7 @@
                 <div id="ingredientsList"></div>
               </div>
 
-              <div style="margin-top:12px">
-                <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Raw API response</div>
-                <pre id="rawPre" style="height:120px"></pre>
-              </div>
+              <!-- Raw API response intentionally not shown to users -->
             </div>
 
           </div>
@@ -133,7 +125,7 @@
   </div>
 
   <script>
-    /***** CONFIG: edit these two values BEFORE testing *****/
+    /***** CONFIG: edit this BEFORE testing *****/
     const API_ENDPOINT = "https://5dos9o5u1h.execute-api.us-east-1.amazonaws.com/analyze-food"; // <-- Replace this with your deployed scanner endpoint
     const API_FIELD_NAME = "image_file";                         // <-- Change to 'image' if your API expects 'image' instead
     /***** end config *****/
@@ -154,12 +146,8 @@
     const foodSummary = document.getElementById('foodSummary');
     const nutritionKV = document.getElementById('nutritionKV');
     const ingredientsList = document.getElementById('ingredientsList');
-    const rawPre = document.getElementById('rawPre');
     const isHealthy = document.getElementById('isHealthy');
     const healthReason = document.getElementById('healthReason');
-    const apiKeyInput = document.getElementById('apiKey');
-    const downloadBtn = document.getElementById('downloadBtn');
-    const copyBtn = document.getElementById('copyBtn');
 
     let currentFile = null;
     let lastResponse = null;
@@ -185,10 +173,10 @@
       statusNote.textContent = 'Image ready';
       finalUI.style.display='none';
       noRes.style.display='none';
-      rawPre.textContent = '';
+      lastResponse = null;
     }
 
-    clearBtn.addEventListener('click', ()=>{
+    clearBtn.addEventListener('click', ()=> {
       currentFile = null;
       fileInput.value = '';
       preview.style.display = 'none';
@@ -196,11 +184,11 @@
       statusNote.textContent = 'Cleared';
       finalUI.style.display='none';
       noRes.style.display='block';
-      rawPre.textContent = '';
+      lastResponse = null;
     });
 
     // scanning
-    scanBtn.addEventListener('click', async ()=>{
+    scanBtn.addEventListener('click', async ()=> {
       if (!currentFile) { alert('Please upload an image first'); return; }
       if (!API_ENDPOINT || API_ENDPOINT.includes('REPLACE_WITH')) {
         alert('Please open index.html and replace the API_ENDPOINT value with your real endpoint (Step 1).');
@@ -213,106 +201,128 @@
       const fd = new FormData();
       fd.append(API_FIELD_NAME, currentFile);
 
-      const headers = {};
-      const apiKey = apiKeyInput.value.trim();
-      if (apiKey) {
-        headers['Authorization'] = apiKey.startsWith('Bearer') ? apiKey : ('Bearer ' + apiKey);
-      }
-
       try {
-        const resp = await fetch(API_ENDPOINT, { method:'POST', body: fd, headers });
+        // Note: no Authorization header used here (API key UI removed intentionally)
+        const resp = await fetch(API_ENDPOINT, { method:'POST', body: fd });
         const text = await resp.text();
+
         let parsed;
         try {
           parsed = JSON.parse(text);
-        } catch(e) {
-          throw new Error('API returned non-JSON response: ' + text);
+        } catch (e) {
+          // If the API returns non-JSON, we surface a friendly error to the user
+          throw new Error('API returned a non-JSON response');
         }
 
         lastResponse = parsed;
 
         // prefer parsed.final_output
         const final = parsed.final_output || parsed.data || parsed.result || parsed;
-        renderFinal(final, parsed);
+        renderFinal(final);
         statusNote.textContent = 'Done';
       } catch (err) {
         statusNote.textContent = 'Error: ' + err.message;
-        alert('Scan failed: ' + err.message + '\\n(If you see a CORS error in the console, ask your dev to enable CORS for this site.)');
+        alert('Scan failed: ' + err.message + '\n(If you see a CORS error in the console, ask your dev to enable CORS for this site.)');
         console.error(err);
       } finally {
         scanBtn.disabled = false;
       }
     });
 
-    function renderFinal(finalObj, raw){
-      rawPre.textContent = JSON.stringify(raw, null, 2);
-      if (!finalObj || !finalObj.food_name) {
-        // show raw if final not as expected
-        finalUI.style.display='block';
-        foodName.textContent = finalObj && finalObj.food_name ? finalObj.food_name : '(unexpected schema)';
-        confidence.textContent = finalObj && finalObj.confidence_score ? finalObj.confidence_score : '-';
-        foodSummary.textContent = finalObj && finalObj.food_summary ? finalObj.food_summary : 'No summary provided';
-        nutritionKV.innerHTML = '';
-        isHealthy.textContent = finalObj && finalObj.Health_assessment ? String(finalObj.Health_assessment['is_healthy?']) : 'N/A';
-        healthReason.textContent = finalObj && finalObj.Health_assessment ? (finalObj.Health_assessment.Reason || '') : '';
-        ingredientsList.innerHTML = '<div style="color:var(--muted)">No structured ingredients found — inspect raw.</div>';
+    function safeDisplay(v) {
+      if (v === null || v === undefined || v === '') return '-';
+      return String(v);
+    }
+
+    function renderFinal(finalObj) {
+      // Hide raw API output — show only UI fields that matter.
+      if (!finalObj || typeof finalObj !== 'object') {
+        // Unexpected shape — show a minimal message
+        finalUI.style.display = 'block';
+        foodName.textContent = '(no recognisable data)';
+        confidence.textContent = '-';
+        foodSummary.textContent = 'No summary available.';
+        nutritionKV.innerHTML = '<div class="kv"><div style="color:var(--muted)">calories</div><div style="font-weight:600">-</div></div>';
+        isHealthy.textContent = 'N/A';
+        healthReason.textContent = '';
+        ingredientsList.innerHTML = '<div style="color:var(--muted)">No ingredients provided</div>';
         return;
       }
 
-      // populate structured UI
-      finalUI.style.display='block';
-      foodName.textContent = finalObj.food_name || '';
-      confidence.textContent = finalObj.confidence_score || '';
-      foodSummary.textContent = finalObj.food_summary || '';
+      // Populate structured UI fields, using defaults if missing
+      finalUI.style.display = 'block';
+      foodName.textContent = safeDisplay(finalObj.food_name || finalObj.name || '');
+      confidence.textContent = safeDisplay(finalObj.confidence_score || finalObj.confidence || '-');
+      foodSummary.textContent = safeDisplay(finalObj.food_summary || finalObj.summary || '');
 
-      // nutrition
+      // nutrition: ensure keys show even if some values are missing
       nutritionKV.innerHTML = '';
-      const nb = finalObj.nutritional_breakdown || {};
-      for (const k of Object.keys(nb)) {
+      const nb = finalObj.nutritional_breakdown || finalObj.nutrition || {};
+      // Prefer common order for display; include any extra keys after
+      const preferredOrder = ['calories','protein','fat','carbohydrates','carbs','fiber','sugar','sodium'];
+      const added = new Set();
+
+      for (const key of preferredOrder) {
+        // allow 'carbs' alias
+        if (nb[key] !== undefined) {
+          const label = key.replace(/_/g, ' ');
+          const value = safeDisplay(nb[key]);
+          const div = document.createElement('div');
+          div.className = 'kv';
+          div.innerHTML = `<div style="color:var(--muted)">${label}</div><div style="font-weight:600">${value}</div>`;
+          nutritionKV.appendChild(div);
+          added.add(key);
+        }
+      }
+
+      // Add any remaining keys from nb
+      Object.keys(nb).forEach(k => {
+        if (added.has(k)) return;
+        const label = k.replace(/_/g, ' ');
+        const value = safeDisplay(nb[k]);
         const div = document.createElement('div');
         div.className = 'kv';
-        div.innerHTML = `<div style="color:var(--muted)">${k.replace(/_/g,' ')}</div><div style="font-weight:600">${nb[k]}</div>`;
+        div.innerHTML = `<div style="color:var(--muted)">${label}</div><div style="font-weight:600">${value}</div>`;
+        nutritionKV.appendChild(div);
+      });
+
+      // If nutritionKV still empty, show a default empty set
+      if (!nutritionKV.children.length) {
+        const div = document.createElement('div');
+        div.className = 'kv';
+        div.innerHTML = `<div style="color:var(--muted)">calories</div><div style="font-weight:600">-</div>`;
         nutritionKV.appendChild(div);
       }
 
-      // health
-      isHealthy.textContent = String(finalObj.Health_assessment?.['is_healthy?']);
-      healthReason.textContent = finalObj.Health_assessment?.Reason || '';
+      // Health assessment
+      const ha = finalObj.Health_assessment || finalObj.health_assessment || finalObj.health || null;
+      if (ha) {
+        // attempt to be flexible with field names
+        const healthyVal = ha['is_healthy?'] ?? ha.is_healthy ?? ha.healthy ?? ha['healthy'];
+        isHealthy.textContent = healthyVal === undefined ? 'N/A' : String(healthyVal);
+        healthReason.textContent = ha.Reason || ha.reason || ha.explanation || '';
+      } else {
+        isHealthy.textContent = 'N/A';
+        healthReason.textContent = '';
+      }
 
-      // ingredients
+      // Ingredients
       ingredientsList.innerHTML = '';
-      if (Array.isArray(finalObj.ingredients_identified) && finalObj.ingredients_identified.length) {
-        finalObj.ingredients_identified.forEach(it => {
+      const ingredients = finalObj.ingredients_identified || finalObj.ingredients || [];
+      if (Array.isArray(ingredients) && ingredients.length) {
+        ingredients.forEach(it => {
           const block = document.createElement('div');
           block.style.padding = '8px';
           block.style.borderBottom = '1px solid #f1f5f1';
-          block.innerHTML = `<div style="font-weight:600">${it.name}</div><div style="color:var(--muted);margin-top:6px">${it.nutrition_description}</div>`;
+          const name = safeDisplay(it.name || it.ingredient || '');
+          const desc = safeDisplay(it.nutrition_description || it.description || it.note || '');
+          block.innerHTML = `<div style="font-weight:600">${name}</div><div style="color:var(--muted);margin-top:6px">${desc}</div>`;
           ingredientsList.appendChild(block);
         });
       } else {
         ingredientsList.innerHTML = '<div style="color:var(--muted)">No ingredients provided</div>';
       }
     }
-
-    // download / copy
-    downloadBtn.addEventListener('click', ()=>{
-      if (!lastResponse) return alert('No response to download');
-      const b = new Blob([JSON.stringify(lastResponse, null, 2)], {type:'application/json'});
-      const u = URL.createObjectURL(b);
-      const a = document.createElement('a'); a.href = u; a.download = 'scanner-result.json'; a.click();
-      URL.revokeObjectURL(u);
-    });
-
-    copyBtn.addEventListener('click', async ()=>{
-      if (!lastResponse) return alert('No response to copy');
-      try {
-        await navigator.clipboard.writeText(JSON.stringify(lastResponse, null, 2));
-        alert('Copied to clipboard');
-      } catch (e) {
-        alert('Copy failed — check your browser permissions');
-      }
-    });
   </script>
 </body>
 </html>
-
